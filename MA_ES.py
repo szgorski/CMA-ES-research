@@ -1,5 +1,7 @@
 from Strategy import *
 import numpy as np
+DELTA = 10
+MAX_POPULATION = 1000
 
 
 class MAES(Strategy):
@@ -14,6 +16,8 @@ class MAES(Strategy):
     def calculate(self):
         # a vector of means for each dimension (initialized with given values)
         mean = self.x_init
+
+       # self.dim = 50
 
         sigma = 1  # neutral element of multiplication
         lamb = 4 + int(3 * np.log(self.dim))  # values sourced from ...
@@ -44,7 +48,8 @@ class MAES(Strategy):
         self.best_x = 0
         self.best_value = np.inf
 
-        for _ in range(self.max_iter):
+        for it in range(self.max_iter):
+            print(self.best_value)
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
             d = np.zeros((lamb, self.dim))
@@ -71,7 +76,6 @@ class MAES(Strategy):
 
             # find and apply the mean of mu best samples
             mean = mean + sigma * np.sum(w[i] * d[order[i]] for i in range(mu))
-
             # evolution path update
             p_sqrt = np.sqrt(c_sigma * (2 - c_sigma) * mu_eff)
             weighted_z = np.sum(w[i] * z[order[i]] for i in range(mu))
@@ -95,6 +99,22 @@ class MAES(Strategy):
             m_matrix = np.dot(m_matrix, np.eye(
                 self.dim, self.dim) + rank_1 + rank_mu)
 
-            # step-size update TODO fn
+            if it % DELTA == 0 and self.dim < MAX_POPULATION:
+
+                # add rows and columns to matrix m, sigma path and mean to match new dimension
+                add_matrix_m = np.eye(self.dim+DELTA)
+                add_matrix_m[0:self.dim, 0:self.dim] = m_matrix
+                add_path_sigma = np.zeros(self.dim+DELTA)
+                add_path_sigma[0:self.dim] = path_sigma
+                add_mean = np.full(self.dim+DELTA, self.x_init)
+                add_mean[0:self.dim] = mean
+
+                # insrease dimension -> increase population size
+                self.dim += DELTA
+
+                m_matrix = add_matrix_m
+                path_sigma = add_path_sigma
+                mean = add_mean
+
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
                             for x in path_sigma) / self.dim - 1))
