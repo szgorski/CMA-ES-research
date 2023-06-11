@@ -1,23 +1,46 @@
-from CMA_ES import *
-from MA_ES import *
+from __future__ import division, print_function
+from numpy.random import rand
+from typing import Callable, Any
+import cocoex
+import cocopp
+import os
+import webbrowser
+
+from CMA_ES import CMAES
+# from MA_ES import MAES
+
+# configuration
+budget = 5
+count_evaluations = False
+output_folder = "scipy-optimize-fmin"
+seed = 34763485763956  # either int or None
 
 
-class Sphere(Function):
+def f_min(function: Callable,
+          x_initial: Any):
+    es = CMAES(function, x_initial, budget, count_evaluations, seed)
+    # es = MAES(function, x_initial, budget, count_evaluations, seed)
+    es.calculate()
 
-    def __init__(self, dim, lb, ub):
-        super().__init__(dim, lb, ub)
-
-    def evaluate(self, x):
-        x = self.l_bound + x * (self.u_bound - self.l_bound)
-        re = sum(np.power(x[i], 2) for i in range(self.dim))
-        return re
+    return es.best_value
 
 
 if __name__ == "__main__":
-    TaskProb = Sphere(50, -50, 50)
+    # coco functions
+    suite_name = "bbob"
+    suite = cocoex.Suite(suite_name, "", "")
+    observer = cocoex.Observer(suite_name, "result_folder: " + output_folder)
+    minimal_print = cocoex.utilities.MiniPrint()
 
-    Task1 = MAES(TaskProb, 1000)
-    Task1.calculate()
+    # testing
+    for problem in suite:
+        problem.observe_with(observer)
+        x_init = problem.initial_solution
+        f_min(problem, x_init)
+        x0 = problem.lower_bounds + ((rand(problem.dimension) + rand(problem.dimension)) *
+                                     (problem.upper_bounds - problem.lower_bounds) / 2)
+        minimal_print(problem, final=problem.index == len(suite) - 1)
 
-    Task2 = CMAES(TaskProb, 1000)
-    Task2.calculate()
+    # post-process data
+    cocopp.main(observer.result_folder)
+    webbrowser.open("file://" + os.getcwd() + "/ppdata/index.html")

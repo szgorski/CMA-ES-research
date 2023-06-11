@@ -1,26 +1,26 @@
-from Function import Function
-from Strategy import Strategy
+from Strategy import *
 import numpy as np
 
 
 class MAES(Strategy):
-    def __init__(self, function: Function, max_iterations: int):
-        # problem initialization
-        super().__init__(function, max_iterations)
-        self.dim = self.func.dim
-
-        # results
-        self.best_x = None
-        self.best_value = None
+    def __init__(self,
+                 function: Callable,
+                 x_initial: Any,
+                 max_iterations: int,
+                 limit_evaluations: bool,
+                 seed: int | None = None):
+        super().__init__(function, x_initial, max_iterations, limit_evaluations, seed)
 
     def calculate(self):
-        
-        # a vector of means for each dimension (initialized with random values from [0.0, 1.0))
-        mean = np.random.random(self.dim)
+        # a vector of means for each dimension (initialized with given values)
+        mean = self.x_init
 
         sigma = 1  # neutral element of multiplication
         lamb = 4 + int(3 * np.log(self.dim))  # values sourced from ...
         mu = int(lamb / 2)  # TODO fn
+
+        if self.max_iter is False:
+            self.max_iter = np.ceil(self.max_eval / lamb)
 
         # weights assigned from the highest-ranked to less important
         w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])  # TODO fn
@@ -37,21 +37,21 @@ class MAES(Strategy):
         self.best_x = 0
         self.best_value = np.inf
         
-        for it in range(self.max_iter):
+        for _ in range(self.max_iter):
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
             d = np.zeros((lamb, self.dim))
             x = np.zeros((lamb, self.dim))
 
             for i in range(lamb):
-                z[i] = np.random.normal(0, 1, self.dim)   # generation of plain samples from N(0, 1)
+                z[i] = self.rand.normal(0, 1, self.dim)   # generation of plain samples from N(0, 1)
                 d[i] = np.dot(m_matrix, z[i])             # placement of samples in the space with respect to matrix M
                 x[i] = mean + sigma * d[i]                # dispersion of samples with respect to sigma
 
             # evaluate samples and update mean
             score = np.zeros(lamb)
             for i in range(lamb):
-                score[i] = self.evaluate(x[i])
+                score[i] = self.func(x[i])
 
             # sort samples by score
             order = np.argsort(score)
@@ -85,10 +85,3 @@ class MAES(Strategy):
 
             # step-size update TODO fn
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
-            print(it + 1, self.best_value)
-
-    def get_results(self):
-        return self.best_value, self.best_x
-
-    def evaluate(self, value):
-        return self.func.evaluate(value)
