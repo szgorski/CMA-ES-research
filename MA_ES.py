@@ -23,27 +23,20 @@ class MAES(Strategy):
             self.max_iter = np.ceil(self.max_eval / lamb)
 
         # weights assigned from the highest-ranked to less important
-        w = np.array([np.log(mu + 0.5) - np.log(i + 1)
-                     for i in range(mu)])  # TODO fn
-        # normalization to 1
-        w /= sum(w)
-        mu_eff = 1 / np.sum(np.power(w, 2)
-                            for w in w)      # mu efficiency (const)
+        w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])  # TODO fn
+        w /= sum(w)                                         # normalization to 1
+        mu_eff = 1 / np.sum(np.power(w, 2) for w in w)      # mu efficiency (const)
 
-        # sigma path forget ratio
-        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)
-        # RANK-1 update ratio
-        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)
-        c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) /
-                   ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
+        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)                                       # sigma path forget ratio
+        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)                                             # RANK-1 update ratio
+        c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) / ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
 
-        # sigma evolution path (accumulation of historical values of sigma)
-        path_sigma = np.zeros(self.dim)
+        path_sigma = np.zeros(self.dim)     # sigma evolution path (accumulation of historical values of sigma)
         m_matrix = np.eye(self.dim)         # matrix M
-
+        
         self.best_x = 0
         self.best_value = np.inf
-
+        
         for _ in range(self.max_iter):
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
@@ -51,12 +44,9 @@ class MAES(Strategy):
             x = np.zeros((lamb, self.dim))
 
             for i in range(lamb):
-                # generation of plain samples from N(0, 1)
-                z[i] = self.rand.normal(0, 1, self.dim)
-                # placement of samples in the space with respect to matrix M
-                d[i] = np.dot(m_matrix, z[i])
-                # dispersion of samples with respect to sigma
-                x[i] = mean + sigma * d[i]
+                z[i] = self.rand.normal(0, 1, self.dim)   # generation of plain samples from N(0, 1)
+                d[i] = np.dot(m_matrix, z[i])             # placement of samples in the space with respect to matrix M
+                x[i] = mean + sigma * d[i]                # dispersion of samples with respect to sigma
 
             # evaluate samples and update mean
             score = np.zeros(lamb)
@@ -80,8 +70,7 @@ class MAES(Strategy):
             # RANK-1
             p_matrix = path_sigma.reshape(self.dim, 1)
             p_matrix_t = path_sigma.reshape(1, self.dim)
-            rank_1 = c_1 / 2 * \
-                (np.dot(p_matrix, p_matrix_t) - np.eye(self.dim, self.dim))
+            rank_1 = c_1 / 2 * (np.dot(p_matrix, p_matrix_t) - np.eye(self.dim, self.dim))
 
             # RANK-MU
             rank_mu = np.zeros((self.dim, self.dim))
@@ -92,9 +81,7 @@ class MAES(Strategy):
             rank_mu = c_mu / 2 * (rank_mu - np.eye(self.dim, self.dim))
 
             # matrix M update
-            m_matrix = np.dot(m_matrix, np.eye(
-                self.dim, self.dim) + rank_1 + rank_mu)
+            m_matrix = np.dot(m_matrix, np.eye(self.dim, self.dim) + rank_1 + rank_mu)
 
             # step-size update TODO fn
-            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
-                            for x in path_sigma) / self.dim - 1))
+            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
