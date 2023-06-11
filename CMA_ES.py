@@ -23,25 +23,19 @@ class CMAES(Strategy):
             self.max_iter = np.ceil(self.max_eval / lamb)
 
         # weights assigned from the highest-ranked to less important
-        w = np.array([np.log(mu + 0.5) - np.log(i + 1)
-                     for i in range(mu)])  # TODO fn source
+        w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])  # TODO fn source
         w /= sum(w)  # normalization to 1
         mu_eff = 1 / np.sum(np.power(w, 2) for w in w)  # mu efficiency (const)
 
         # TODO fn source
-        c_c = (4 + mu_eff / self.dim) / (self.dim + 4 +
-                                         2 * mu_eff / self.dim)  # C path forget ratio
-        # sigma path forget ratio
-        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)
+        c_c = (4 + mu_eff / self.dim) / (self.dim + 4 + 2 * mu_eff / self.dim)  # C path forget ratio
+        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)  # sigma path forget ratio
         c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)  # RANK-1 update ratio
-        c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) /
-                   ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
+        c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) / ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
         c_last = 1 - c_1 - c_mu  # C matrix succession ratio
 
-        # C evolution path  (accumulation of historical values of C)
-        path_c = np.zeros(self.dim)
-        # sigma evolution path (accumulation of historical values of sigma)
-        path_sigma = np.zeros(self.dim)
+        path_c = np.zeros(self.dim)  # C evolution path  (accumulation of historical values of C)
+        path_sigma = np.zeros(self.dim)  # sigma evolution path (accumulation of historical values of sigma)
         c_matrix = np.eye(self.dim)  # covariance matrix C
 
         self.best_x = self.x_init
@@ -50,8 +44,7 @@ class CMAES(Strategy):
         for _ in range(self.max_iter):
             # calculate M = square root of C (https://stackoverflow.com/questions/61262772)
             eigenvalues, eigenvectors = np.linalg.eigh(c_matrix)
-            m_matrix = (eigenvectors * np.sqrt(eigenvalues)
-                        ) @ eigenvectors.transpose()
+            m_matrix = (eigenvectors * np.sqrt(eigenvalues)) @ eigenvectors.transpose()
 
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
@@ -59,12 +52,9 @@ class CMAES(Strategy):
             x = np.zeros((lamb, self.dim))
 
             for i in range(lamb):
-                # generation of plain samples from N(0, 1)
-                z[i] = self.rand.normal(0, 1, self.dim)
-                # placement of samples in the space with respect to matrix M
-                d[i] = np.dot(m_matrix, z[i])
-                # dispersion of samples with respect to sigma
-                x[i] = mean + sigma * d[i]
+                z[i] = self.rand.normal(0, 1, self.dim)  # generation of plain samples from N(0, 1)
+                d[i] = np.dot(m_matrix, z[i])  # placement of samples in the space with respect to matrix M
+                x[i] = mean + sigma * d[i]  # dispersion of samples with respect to sigma
 
             # evaluate samples and update mean
             score = np.zeros(lamb)
@@ -105,5 +95,4 @@ class CMAES(Strategy):
             c_matrix = last_c + rank_1 + rank_mu
 
             # step-size update TODO fn source
-            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
-                            for x in path_sigma) / self.dim - 1))
+            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
