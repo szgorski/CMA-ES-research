@@ -5,7 +5,7 @@ DELTA = 10
 MAX_POPULATION = 1000
 
 
-class MAES(Strategy):
+class IPOP_MAES(Strategy):
     def __init__(self,
                  function: Callable,
                  x_initial: Any,
