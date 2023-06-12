@@ -133,6 +133,14 @@ class IPOP_MAES(Strategy):
 
             if (self.stop_condition(m_matrix, it, order[0], order[-1], sigma, mean) and lamb < MAX_POPULATION):
                 lamb *= DELTA
+                mean = self.x_init
+                sigma = 1
+                mu = int(lamb / 2)
+                path_sigma = np.zeros(self.dim)
+                m_matrix = np.eye(self.dim)
+                w = np.array([np.log(mu + 0.5) - np.log(i + 1)
+                              for i in range(mu)])  # TODO fn
+                w /= sum(w)
 
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
                             for x in path_sigma) / self.dim - 1))
