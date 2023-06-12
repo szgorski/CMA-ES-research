@@ -1,8 +1,14 @@
 from Strategy import *
 import numpy as np
-
-DELTA = 10
-MAX_POPULATION = 1000
+import math
+DELTA = 2
+MAX_POPULATION = 10000
+# termination criteria
+TOLX = 1e-12
+TOLXUP = 1e4
+TOLFUN = 1e-12
+TOLCOND = 1e14
+EPSILON = 1e-8
 
 
 class IPOP_MAES(Strategy):
@@ -13,6 +19,33 @@ class IPOP_MAES(Strategy):
                  limit_evaluations: bool,
                  seed: int | None = None):
         super().__init__(function, x_initial, max_iterations, limit_evaluations, seed)
+
+    def stop_condition(self, m_matrix, it, best_score, worst_score, sigma, mean):
+
+        if (abs(best_score-worst_score) < TOLFUN):
+            return True
+
+        D2, B = np.linalg.eigh(m_matrix)
+        D = np.sqrt(np.where(D2 < 0, EPSILON, D2))
+        if (sigma * np.max(D) > TOLXUP):
+            return True
+
+        condition_number = np.linalg.cond(m_matrix)
+        if (condition_number > TOLCOND):
+            return True
+
+        diag = np.diag(m_matrix)
+        if np.all(sigma * diag < TOLX):
+            return True
+
+        if np.any(mean == mean + (0.2 * sigma * np.sqrt(diag))):
+            return True
+
+        i = it % self.dim
+        if np.all(mean == mean + (0.1 * sigma * D[i] * B[:, i])):
+            return True
+
+        return False
 
     def calculate(self):
         # a vector of means for each dimension (initialized with given values)
@@ -68,6 +101,8 @@ class IPOP_MAES(Strategy):
 
             # sort samples by score
             order = np.argsort(score)
+            best_score = order[0]
+            worst_score = order[-1]
             if score[order[0]] < self.best_value:
                 self.best_x = x[order[0]]
                 self.best_value = score[order[0]]
@@ -97,8 +132,9 @@ class IPOP_MAES(Strategy):
             # matrix M update
             m_matrix = np.dot(m_matrix, np.eye(
                 self.dim, self.dim) + rank_1 + rank_mu)
-            if it % DELTA == 0 and self.lamb < MAX_POPULATION:
-                lamb += DELTA
+
+            if (self.stop_condition(m_matrix, it, best_score, worst_score, sigma, mean) and self.lamb < MAX_POPULATION):
+                lamb *= DELTA
 
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
                             for x in path_sigma) / self.dim - 1))
