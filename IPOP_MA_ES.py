@@ -131,8 +131,8 @@ class IPOP_MAES(Strategy):
             m_matrix = np.dot(m_matrix, np.eye(
                 self.dim, self.dim) + rank_1 + rank_mu)
 
-            if (self.stop_condition(m_matrix, it, order[0], order[-1], sigma, mean) and self.lamb < MAX_POPULATION):
-                self.lamb *= DELTA
+            if (self.stop_condition(m_matrix, it, order[0], order[-1], sigma, mean) and lamb < MAX_POPULATION):
+                lamb *= DELTA
 
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
                             for x in path_sigma) / self.dim - 1))
