@@ -1,8 +1,9 @@
 from Strategy import *
 import numpy as np
-import math
+
 DELTA = 2
 MAX_POPULATION = 10000
+
 # termination criteria
 TOLX = 1e-12
 TOLXUP = 1e4
@@ -20,29 +21,30 @@ class IPOP_MAES(Strategy):
                  seed: int | None = None):
         super().__init__(function, x_initial, max_iterations, limit_evaluations, seed)
 
-    def stop_condition(self, m_matrix, it, best_score, worst_score, sigma, mean):
+    def stop_condition(self, m_matrix, it, best_iter_score, worst_iter_score, sigma, path_sigma):
 
-        if (abs(best_score-worst_score) < TOLFUN):
+        eigenvalues, eigenvectors = np.linalg.eigh(m_matrix)
+        if abs(best_iter_score - worst_iter_score) < TOLFUN:
             return True
 
-        D2, B = np.linalg.eigh(m_matrix)
-        D = np.sqrt(np.where(D2 < 0, EPSILON, D2))
-        if (sigma * np.max(D) > TOLXUP):
+        if sigma * np.max(eigenvectors) > TOLXUP:
             return True
 
-        condition_number = np.linalg.cond(m_matrix)
-        if (condition_number > TOLCOND):
+        if np.linalg.cond(m_matrix) > TOLCOND:
             return True
 
         diag = np.diag(m_matrix)
-        if np.all(sigma * diag < TOLX):
+        if np.all(sigma * diag < TOLX) and np.all(sigma * path_sigma < TOLX):
             return True
 
-        if np.any(mean == mean + (0.2 * sigma * np.sqrt(diag))):
+        if np.any(abs(0.2 * sigma * diag) < TOLFUN):
             return True
 
         i = it % self.dim
-        if np.all(mean == mean + (0.1 * sigma * D[i] * B[:, i])):
+        if np.all(abs(0.1 * sigma * eigenvalues[i] * eigenvectors[:, i]) < EPSILON):
+            return True
+
+        if np.isnan(np.max(m_matrix)):
             return True
 
         return False
@@ -51,53 +53,49 @@ class IPOP_MAES(Strategy):
         # a vector of means for each dimension (initialized with given values)
         mean = self.x_init
 
-        sigma = 1  # neutral element of multiplication
-        lamb = 4 + int(3 * np.log(self.dim))  # values sourced from ...
+        eval_count = 0
+        eval_left = self.max_eval
+        sigma = 1                                                               # neutral element of multiplication
+        lamb = 4 + int(3 * np.log(self.dim))
         mu = int(lamb / 2)  # TODO fn
 
-        if self.max_iter is False:
+        if self.max_iter is None:
             self.max_iter = np.ceil(self.max_eval / lamb)
 
         # weights assigned from the highest-ranked to less important
-        w = np.array([np.log(mu + 0.5) - np.log(i + 1)
-                     for i in range(mu)])  # TODO fn
-        # normalization to 1
-        w /= sum(w)
-        mu_eff = 1 / np.sum(np.power(w, 2)
-                            for w in w)      # mu efficiency (const)
+        w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])
+        w /= sum(w)                                                             # normalization to 1
+        mu_eff = 1 / np.sum(np.power(w, 2) for w in w)                          # mu efficiency (const)
 
-        # sigma path forget ratio
-        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)
-        # RANK-1 update ratio
-        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)
+        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)                        # sigma path forget ratio
+        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)                              # RANK-1 update ratio
         c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) /
-                   ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
+                    ((self.dim + 2) ** 2 + mu_eff)])                            # RANK-MU update ratio
 
         # sigma evolution path (accumulation of historical values of sigma)
         path_sigma = np.zeros(self.dim)
-        m_matrix = np.eye(self.dim)         # matrix M
+        m_matrix = np.eye(self.dim)  # matrix M
 
         self.best_x = 0
         self.best_value = np.inf
 
-        for it in range(self.max_iter):
+        it = 0
+        while it < self.max_iter:
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
             d = np.zeros((lamb, self.dim))
             x = np.zeros((lamb, self.dim))
 
             for i in range(lamb):
-                # generation of plain samples from N(0, 1)
-                z[i] = self.rand.normal(0, 1, self.dim)
-                # placement of samples in the space with respect to matrix M
-                d[i] = np.dot(m_matrix, z[i])
-                # dispersion of samples with respect to sigma
-                x[i] = mean + sigma * d[i]
+                z[i] = self.rand.normal(0, 1, self.dim)     # generation of plain samples from N(0, 1)
+                d[i] = np.dot(m_matrix, z[i])               # placement of samples in the space with respect to matrix M
+                x[i] = mean + sigma * d[i]                  # dispersion of samples with respect to sigma
 
             # evaluate samples and update mean
             score = np.zeros(lamb)
             for i in range(lamb):
                 score[i] = self.func(x[i])
+                eval_count += 1
 
             # sort samples by score
             order = np.argsort(score)
@@ -116,8 +114,7 @@ class IPOP_MAES(Strategy):
             # RANK-1
             p_matrix = path_sigma.reshape(self.dim, 1)
             p_matrix_t = path_sigma.reshape(1, self.dim)
-            rank_1 = c_1 / 2 * \
-                (np.dot(p_matrix, p_matrix_t) - np.eye(self.dim, self.dim))
+            rank_1 = c_1 / 2 * (np.dot(p_matrix, p_matrix_t) - np.eye(self.dim, self.dim))
 
             # RANK-MU
             rank_mu = np.zeros((self.dim, self.dim))
@@ -128,19 +125,34 @@ class IPOP_MAES(Strategy):
             rank_mu = c_mu / 2 * (rank_mu - np.eye(self.dim, self.dim))
 
             # matrix M update
-            m_matrix = np.dot(m_matrix, np.eye(
-                self.dim, self.dim) + rank_1 + rank_mu)
+            m_matrix = np.dot(m_matrix, np.eye(self.dim, self.dim) + rank_1 + rank_mu)
+            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
+            it += 1
 
-            if (self.stop_condition(m_matrix, it, order[0], order[-1], sigma, mean) and lamb < MAX_POPULATION):
+            if self.stop_condition(m_matrix, it, order[0], order[-1], sigma, path_sigma) and lamb < MAX_POPULATION:
+                # a vector of means for each dimension (initialized randomly in the search space)
+                mean = self.lb + (self.rand.random(self.dim) * (self.ub - self.lb))
+
+                sigma = 1                                                       # neutral element of multiplication
                 lamb *= DELTA
-                mean = self.x_init
-                sigma = 1
                 mu = int(lamb / 2)
-                path_sigma = np.zeros(self.dim)
-                m_matrix = np.eye(self.dim)
-                w = np.array([np.log(mu + 0.5) - np.log(i + 1)
-                              for i in range(mu)])  # TODO fn
-                w /= sum(w)
 
-            sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2)
-                            for x in path_sigma) / self.dim - 1))
+                if self.limit_eval:
+                    eval_left = eval_left - eval_count
+                    eval_count = 0
+                    self.max_iter = np.ceil(eval_left / lamb)
+                    it = 0
+
+                # weights assigned from the highest-ranked to less important
+                w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])
+                w /= sum(w)                                                     # normalization to 1
+                mu_eff = 1 / np.sum(np.power(w, 2) for w in w)                  # mu efficiency (const)
+
+                c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)                # sigma path forget ratio
+                c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)                      # RANK-1 update ratio
+                c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) /
+                            ((self.dim + 2) ** 2 + mu_eff)])                    # RANK-MU update ratio
+
+                # sigma evolution path (accumulation of historical values of sigma)
+                path_sigma = np.zeros(self.dim)
+                m_matrix = np.eye(self.dim)                                    # matrix M

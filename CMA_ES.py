@@ -1,6 +1,8 @@
 from Strategy import *
 import numpy as np
 
+CELL_MAX = np.float64(1e32)
+
 
 class CMAES(Strategy):
     def __init__(self,
@@ -15,36 +17,43 @@ class CMAES(Strategy):
         # a vector of means for each dimension (initialized with given values)
         mean = self.x_init
 
-        sigma = 1  # neutral element of multiplication
-        lamb = 4 + int(3 * np.log(self.dim))  # values sourced from ...
-        mu = int(lamb / 2)  # TODO fn source
+        sigma = 1                                                               # neutral element of multiplication
+        lamb = 4 + int(3 * np.log(self.dim))
+        mu = int(lamb / 2)
 
-        if self.max_iter is False:
-            self.max_iter = np.ceil(self.max_eval / lamb)
+        if self.max_iter is None:
+            self.max_iter = int(np.ceil(self.max_eval / lamb))
 
         # weights assigned from the highest-ranked to less important
-        w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])  # TODO fn source
-        w /= sum(w)  # normalization to 1
-        mu_eff = 1 / np.sum(np.power(w, 2) for w in w)  # mu efficiency (const)
+        w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])
+        w /= sum(w)                                                             # normalization to 1
+        mu_eff = 1 / np.sum(np.power(w, 2) for w in w)                          # mu efficiency (const)
 
-        # TODO fn source
         c_c = (4 + mu_eff / self.dim) / (self.dim + 4 + 2 * mu_eff / self.dim)  # C path forget ratio
-        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)  # sigma path forget ratio
-        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)  # RANK-1 update ratio
+        c_sigma = (mu_eff + 2) / (self.dim + mu_eff + 5)                        # sigma path forget ratio
+        c_1 = 2 / ((self.dim + 1.3) ** 2 + mu_eff)                              # RANK-1 update ratio
         c_mu = min([1 - c_1, 2 * (mu_eff - 2 + 1 / mu_eff) / ((self.dim + 2) ** 2 + mu_eff)])  # RANK-MU update ratio
-        c_last = 1 - c_1 - c_mu  # C matrix succession ratio
+        c_last = 1 - c_1 - c_mu                                                 # C matrix succession ratio
 
-        path_c = np.zeros(self.dim)  # C evolution path  (accumulation of historical values of C)
-        path_sigma = np.zeros(self.dim)  # sigma evolution path (accumulation of historical values of sigma)
-        c_matrix = np.eye(self.dim)  # covariance matrix C
+        path_c = np.zeros(self.dim)             # C evolution path  (accumulation of historical values of C)
+        path_sigma = np.zeros(self.dim)         # sigma evolution path (accumulation of historical values of sigma)
+        c_matrix = np.eye(self.dim)             # covariance matrix C
 
         self.best_x = self.x_init
         self.best_value = np.inf
 
         for _ in range(self.max_iter):
+            # delete products of division by zero
+            if np.isnan(np.max(c_matrix)):
+                c_matrix = np.where(~np.isnan(c_matrix), c_matrix, CELL_MAX)
+
             # calculate M = square root of C (https://stackoverflow.com/questions/61262772)
             eigenvalues, eigenvectors = np.linalg.eigh(c_matrix)
             m_matrix = (eigenvectors * np.sqrt(eigenvalues)) @ eigenvectors.transpose()
+
+            # stop calculation if precision issues disallow to continue improvements
+            if np.isnan(np.max(m_matrix)):
+                break
 
             # create lambda new samples
             z = np.zeros((lamb, self.dim))
@@ -52,9 +61,9 @@ class CMAES(Strategy):
             x = np.zeros((lamb, self.dim))
 
             for i in range(lamb):
-                z[i] = self.rand.normal(0, 1, self.dim)  # generation of plain samples from N(0, 1)
-                d[i] = np.dot(m_matrix, z[i])  # placement of samples in the space with respect to matrix M
-                x[i] = mean + sigma * d[i]  # dispersion of samples with respect to sigma
+                z[i] = self.rand.normal(0, 1, self.dim)     # generation of plain samples from N(0, 1)
+                d[i] = np.dot(m_matrix, z[i])               # placement of samples in the space with respect to matrix M
+                x[i] = mean + sigma * d[i]                  # dispersion of samples with respect to sigma
 
             # evaluate samples and update mean
             score = np.zeros(lamb)
@@ -94,5 +103,5 @@ class CMAES(Strategy):
             last_c = c_last * c_matrix
             c_matrix = last_c + rank_1 + rank_mu
 
-            # step-size update TODO fn source
+            # step-size update
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
