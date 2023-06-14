@@ -15,12 +15,12 @@ class MAES(Strategy):
         # a vector of means for each dimension (initialized with given values)
         mean = self.x_init
 
-        sigma = 1  # neutral element of multiplication
-        lamb = 4 + int(3 * np.log(self.dim))  # values sourced from ...
-        mu = int(lamb / 2)  # TODO fn
+        sigma = 1                                           # neutral element of multiplication
+        lamb = 4 + int(3 * np.log(self.dim))
+        mu = int(lamb / 2)
 
-        if self.max_iter is False:
-            self.max_iter = np.ceil(self.max_eval / lamb)
+        if self.max_iter is None:
+            self.max_iter = int(np.ceil(self.max_eval / lamb))
 
         # weights assigned from the highest-ranked to less important
         w = np.array([np.log(mu + 0.5) - np.log(i + 1) for i in range(mu)])  # TODO fn
@@ -34,7 +34,7 @@ class MAES(Strategy):
         path_sigma = np.zeros(self.dim)     # sigma evolution path (accumulation of historical values of sigma)
         m_matrix = np.eye(self.dim)         # matrix M
         
-        self.best_x = 0
+        self.best_x = self.x_init
         self.best_value = np.inf
         
         for _ in range(self.max_iter):
@@ -83,5 +83,9 @@ class MAES(Strategy):
             # matrix M update
             m_matrix = np.dot(m_matrix, np.eye(self.dim, self.dim) + rank_1 + rank_mu)
 
-            # step-size update TODO fn
+            # stop calculation if precision issues disallow to continue improvements
+            if np.isnan(np.max(m_matrix)):
+                break
+
+            # step-size update
             sigma *= np.exp((c_sigma / 2) * (np.sum(np.power(x, 2) for x in path_sigma) / self.dim - 1))
