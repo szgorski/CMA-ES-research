@@ -29,7 +29,7 @@ def f_min(function: Callable,
     return es.best_value
 
 
-if __name__ == "__main__":
+def main():
     # coco functions
     suite_name = "bbob"
     suite = cocoex.Suite(suite_name, "", "")
@@ -48,3 +48,6 @@ if __name__ == "__main__":
     # post-process data
     cocopp.main(observer.result_folder)
     webbrowser.open("file://" + os.getcwd() + "/ppdata/index.html")
+
+
+main()

@@ -35,18 +35,22 @@ def f_min(function: Callable,
     return es.best_value
 
 
-for dim in dimensions:
-    for f, func in enumerate(functions):
-        print(f"Calculating {func.name}...")
+def main():
+    for dim in dimensions:
+        for f, func in enumerate(functions):
+            print(f"Calculating {func.name}...")
 
-        for it in range(len(seeds)):
-            print(f"Instance No. {it + 1}")
-            f_copy = copy.deepcopy(func)
-            fn = f_copy(ndim=dim)
-            x_init = np.ones(dim)
-            f_best = f_min(fn, x_init, seeds[it])
-            solutions[f][1].append(f_best)
+            for it in range(len(seeds)):
+                print(f"Instance No. {it + 1}")
+                f_copy = copy.deepcopy(func)
+                fn = f_copy(ndim=dim)
+                x_init = np.ones(dim)
+                f_best = f_min(fn, x_init, seeds[it])
+                solutions[f][1].append(f_best)
 
-    print(f"\nSolutions for {dim}D:\n")
-    print(solutions)
-    print("")
+        print(f"\nSolutions for {dim}D:\n")
+        print(solutions)
+        print("")
+
+
+main()
